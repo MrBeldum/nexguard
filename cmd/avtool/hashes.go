@@ -47,16 +47,36 @@ var hashesListCmd = &cobra.Command{
 	},
 }
 
+var hashesRmName string
+
 var hashesRmCmd = &cobra.Command{
-	Use:   "rm <sha256>",
-	Short: "Remove a hash",
-	Args:  cobra.ExactArgs(1),
+	Use:   "rm [sha256]",
+	Short: "Remove a hash by sha256 or by --name",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return hashdb.Remove(dbFromCmd(cmd), args[0])
+		name := strings.TrimSpace(hashesRmName)
+		hash := ""
+		if len(args) == 1 {
+			hash = strings.TrimSpace(args[0])
+		}
+		switch {
+		case name != "" && hash != "":
+			return fmt.Errorf("provide either a sha256 argument or --name, not both")
+		case name != "":
+			return hashdb.RemoveByName(dbFromCmd(cmd), name)
+		case hash != "":
+			if !sha256HashPattern.MatchString(hash) {
+				return fmt.Errorf("invalid sha256 hash %q: must be 64 hex characters", hash)
+			}
+			return hashdb.Remove(dbFromCmd(cmd), hash)
+		default:
+			return fmt.Errorf("usage: avtool hashes rm <sha256> | avtool hashes rm --name <name>")
+		}
 	},
 }
 
 func init() {
+	hashesRmCmd.Flags().StringVar(&hashesRmName, "name", "", "remove the entry with this name instead of a sha256")
 	hashesCmd.AddCommand(hashesAddCmd, hashesListCmd, hashesRmCmd)
 	rootCmd.AddCommand(hashesCmd)
 }

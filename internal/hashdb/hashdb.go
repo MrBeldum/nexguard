@@ -96,3 +96,33 @@ func Remove(db *sql.DB, hash string) error {
 	}
 	return nil
 }
+
+// RemoveByName deletes the single entry with the given name. If more than one
+// entry shares the name, nothing is deleted and an error lists the matching
+// hashes so the caller can choose one.
+func RemoveByName(db *sql.DB, name string) error {
+	rows, err := db.Query(`SELECT hash FROM hash_entries WHERE name = ? ORDER BY hash`, name)
+	if err != nil {
+		return fmt.Errorf("looking up name %q: %w", name, err)
+	}
+	defer rows.Close()
+	var hashes []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return fmt.Errorf("looking up name %q: %w", name, err)
+		}
+		hashes = append(hashes, h)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("looking up name %q: %w", name, err)
+	}
+	switch len(hashes) {
+	case 0:
+		return fmt.Errorf("no hash entry named %q", name)
+	case 1:
+		return Remove(db, hashes[0])
+	default:
+		return fmt.Errorf("name %q matches %d entries (%s); remove by hash instead", name, len(hashes), strings.Join(hashes, ", "))
+	}
+}
